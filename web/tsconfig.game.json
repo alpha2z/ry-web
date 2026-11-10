@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/api/game/**/*.ts",
+    "src/views/game/**/*.vue",
+    "src/types/**/*.d.ts",
+    "src/utils/request.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

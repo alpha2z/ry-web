@@ -1,0 +1,16 @@
+resolver 127.0.0.11 valid=10s;
+split_clients "${remote_addr}${http_user_agent}" $release_slot {
+  __GREEN_PERCENT__% green;
+  * blue;
+}
+map $release_slot $release_backend { blue web-blue:80; green web-green:80; }
+server {
+  listen 80;
+  location = /healthz { access_log off; return 200 'ok'; add_header Content-Type text/plain; }
+  location / {
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Release-Slot $release_slot;
+    proxy_pass http://$release_backend;
+  }
+}

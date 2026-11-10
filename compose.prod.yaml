@@ -1,0 +1,89 @@
+name: game-admin-prod
+x-api-common: &api-common
+  restart: unless-stopped
+  environment: &api-env
+    SPRING_PROFILES_ACTIVE: prod
+    DB_URL: jdbc:mysql://mysql:3306/${DB_NAME}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true
+    DB_USERNAME: ${DB_USERNAME}
+    DB_PASSWORD: ${DB_PASSWORD}
+    REDIS_HOST: redis
+    REDIS_PASSWORD: ${REDIS_PASSWORD}
+    GAME_MASTER_KEY: ${GAME_MASTER_KEY}
+    MONITOR_USERNAME: ${MONITOR_USERNAME:-ruoyi}
+    MONITOR_PASSWORD: ${MONITOR_PASSWORD}
+  depends_on:
+    mysql: { condition: service_healthy }
+    redis: { condition: service_healthy }
+  healthcheck:
+    test: ["CMD-SHELL", "AUTH=$$(printf '%s:%s' \"$${MONITOR_USERNAME}\" \"$${MONITOR_PASSWORD}\" | base64); wget -qO- --header=\"Authorization: Basic $$AUTH\" http://127.0.0.1:8080/actuator/health/readiness | grep UP"]
+    interval: 10s
+    timeout: 5s
+    retries: 30
+  deploy:
+    resources:
+      limits: { memory: 1G }
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      TZ: UTC
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--default-time-zone=+00:00"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./server/script/sql/ry_vue_5.X.sql:/docker-entrypoint-initdb.d/00-ruoyi.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
+    environment: { REDIS_PASSWORD: "${REDIS_PASSWORD}" }
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+  api-blue:
+    <<: *api-common
+    image: ${API_IMAGE}:${BLUE_TAG}
+    environment: { <<: *api-env, DEPLOYMENT_SLOT: blue }
+  api-green:
+    <<: *api-common
+    image: ${API_IMAGE}:${GREEN_TAG}
+    environment: { <<: *api-env, DEPLOYMENT_SLOT: green }
+  web-blue:
+    image: ${WEB_IMAGE}:${BLUE_TAG}
+    restart: unless-stopped
+    environment: { API_UPSTREAM: "api-blue:8080" }
+    depends_on: { api-blue: { condition: service_healthy } }
+  web-green:
+    image: ${WEB_IMAGE}:${GREEN_TAG}
+    restart: unless-stopped
+    environment: { API_UPSTREAM: "api-green:8080" }
+    depends_on: { api-green: { condition: service_healthy } }
+  edge:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/nginx/edge.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/certs:/etc/nginx/certs:ro
+    depends_on: [web-blue, web-green]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz | grep ok"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+volumes:
+  mysql-data:
+  redis-data:

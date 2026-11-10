@@ -1,0 +1,23 @@
+name: Roll back production
+on:
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: Known-good slot
+        required: true
+        type: choice
+        options: [blue, green]
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          script: |
+            cd "${{ secrets.DEPLOY_PATH }}"
+            deploy/scripts/rollback.sh "${{ inputs.slot }}"

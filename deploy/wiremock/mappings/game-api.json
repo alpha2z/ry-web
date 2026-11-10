@@ -1,0 +1,24 @@
+{
+  "mappings": [
+    {
+      "request": { "method": "GET", "urlPathPattern": "/ops-api/v1/players/[^/]+" },
+      "response": { "status": 200, "jsonBody": { "playerName": "Docker Demo Player", "level": 42, "status": "ONLINE", "assets": { "gold": 1000, "diamond": 88 } }, "headers": { "Content-Type": "application/json" } }
+    },
+    {
+      "request": { "method": "POST", "url": "/ops-api/v1/reward-grants" },
+      "response": { "status": 200, "jsonBody": { "status": "SUCCESS", "externalTxnId": "{{randomValue type='UUID'}}", "message": "accepted" }, "headers": { "Content-Type": "application/json" }, "transformers": ["response-template"] }
+    },
+    {
+      "request": { "method": "PUT", "urlPathPattern": "/ops-api/v1/activities/[^/]+/versions/[0-9]+" },
+      "response": { "status": 200, "jsonBody": { "status": "SUCCESS", "externalVersion": "mock-current" }, "headers": { "Content-Type": "application/json" } }
+    },
+    {
+      "request": { "method": "POST", "urlPathPattern": "/ops-api/v1/activities/[^/]+/offline" },
+      "response": { "status": 200, "jsonBody": { "status": "SUCCESS" }, "headers": { "Content-Type": "application/json" } }
+    },
+    {
+      "request": { "method": "GET", "url": "/ops-api/v1/health" },
+      "response": { "status": 200, "jsonBody": { "status": "UP" }, "headers": { "Content-Type": "application/json" } }
+    }
+  ]
+}

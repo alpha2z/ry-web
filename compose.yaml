@@ -1,0 +1,73 @@
+name: game-admin
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      TZ: UTC
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_dev_only}
+      MYSQL_DATABASE: ${DB_NAME:-game_admin}
+      MYSQL_USER: ${DB_USERNAME:-game_admin}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-game_admin_dev}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--default-time-zone=+00:00"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./server/script/sql/ry_vue_5.X.sql:/docker-entrypoint-initdb.d/00-ruoyi.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+  redis:
+    image: redis:7.4-alpine
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-game_admin_dev}
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+  wiremock:
+    image: wiremock/wiremock:3.13.1
+    command: ["--global-response-templating", "--verbose"]
+    volumes: ["./deploy/wiremock:/home/wiremock:ro"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/__admin/mappings >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+  api:
+    build: ./server
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:mysql://mysql:3306/${DB_NAME:-game_admin}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true
+      DB_USERNAME: ${DB_USERNAME:-game_admin}
+      DB_PASSWORD: ${DB_PASSWORD:-game_admin_dev}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-game_admin_dev}
+      GAME_MASTER_KEY: ${GAME_MASTER_KEY:-local-only-change-me-32-characters}
+      MONITOR_USERNAME: ${MONITOR_USERNAME:-ruoyi}
+      MONITOR_PASSWORD: ${MONITOR_PASSWORD:-123456}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      wiremock: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "AUTH=$$(printf '%s:%s' \"$${MONITOR_USERNAME}\" \"$${MONITOR_PASSWORD}\" | base64); wget -qO- --header=\"Authorization: Basic $$AUTH\" http://127.0.0.1:8080/actuator/health/readiness | grep UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    deploy:
+      resources:
+        limits: { memory: 1G }
+  web:
+    build: ./web
+    environment:
+      API_UPSTREAM: api:8080
+    ports: ["8088:80"]
+    depends_on:
+      api: { condition: service_healthy }
+volumes:
+  mysql-data:
+  redis-data:

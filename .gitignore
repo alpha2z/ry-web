@@ -1,0 +1,9 @@
+.env
+.m2/
+**/target/
+**/node_modules/
+**/dist/
+deploy/nginx/certs/
+deploy/active-slot
+*.bak
+.DS_Store
